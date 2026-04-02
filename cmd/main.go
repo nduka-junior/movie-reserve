@@ -10,6 +10,7 @@ import (
 	"github.com/nduka-junior/movie-reservation/internal/handlers"
 	"github.com/nduka-junior/movie-reservation/internal/middleware"
 	"github.com/nduka-junior/movie-reservation/internal/models"
+	// "github.com/nduka-junior/movie-reservation/internal/seed"
 )
 
 func main() {
@@ -43,7 +44,10 @@ defer func() {
 } else {
     log.Println("Skipping AutoMigrate (production / Neon)")
 }
-    // Set Gin mode
+   
+// seed.SeedAdmin(db.DB)
+
+// Set Gin mode
     if cfg.Environment == "production" {
         gin.SetMode(gin.ReleaseMode)
     }
@@ -71,12 +75,19 @@ defer func() {
     authHandler := handlers.NewAuthHandler(db, []byte(cfg.JWT.Secret))
 	movieHandler := handlers.NewMovieHandler(db)
 	showtimeHandler := handlers.NewShowtimeHandler(db)	
+	resrvationHandler := handlers.NewReservationHandler(db)
 
     // Public routes
     public := r.Group("/api/v1")
     {
         public.POST("/register", authHandler.Register)
         public.POST("/login", authHandler.Login)
+
+		public.GET("/movie/:id", movieHandler.GetMovie)
+		public.GET("/movies", movieHandler.GetMovies)
+
+	
+
     }
 
     // Protected routes with JWT middleware
@@ -91,6 +102,7 @@ defer func() {
 		admin.PUT("/movies/:id", movieHandler.UpdateMovie)
 		admin.DELETE("/movies/:id", movieHandler.DeleteMovie)
 		admin.POST("/movies/:movieId/showtimes", showtimeHandler.AddShowtime)
+		
 
 		    // ← Only Admin
 		// You can add more admin routes here later:
@@ -100,6 +112,9 @@ defer func() {
         protected.POST("/refresh-token", authHandler.RefreshToken)
         protected.POST("/logout", authHandler.Logout)
         protected.GET("/profile", getUserProfile)
+			protected.GET("/reservations", resrvationHandler.GetMyReservations)
+		protected.POST("/reservations", resrvationHandler.CreateReservation)
+		protected.PUT("/reservations/:id/cancel", resrvationHandler.CancelReservation)
     }
 
     // Start server with configured host and port

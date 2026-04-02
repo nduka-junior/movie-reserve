@@ -24,15 +24,16 @@ func NewMovieHandler(db *database.Database) *MovieHandler {
 // POST /api/v1/movies
 // AddMovie – ADMIN ONLY
 // POST /api/v1/movies
+// AddMovie – ADMIN ONLY
+// POST /api/v1/movies
 func (h *MovieHandler) AddMovie(c *gin.Context) {
-
 	var input struct {
 		Title           string   `json:"title" binding:"required"`
 		Description     string   `json:"description"`
 		PosterURL       string   `json:"poster_url"`
-		DurationMinutes uint     `json:"duration_minutes" binding:"required"` // Added - important for showtimes
+		DurationMinutes uint     `json:"duration_minutes" binding:"required"`
 		ReleaseDate     string   `json:"release_date"` // "2025-06-15"
-		GenreIDs        []uint   `json:"genre_ids"`
+		GenreNames      []string `json:"genre_names"`  // ← Changed from GenreIDs
 		Status          string   `json:"status" binding:"omitempty,oneof=coming-soon now-showing ended"`
 	}
 
@@ -41,7 +42,7 @@ func (h *MovieHandler) AddMovie(c *gin.Context) {
 		return
 	}
 
-	// Parse Release Date (optional)
+	// Parse Release Date
 	var releaseDate *time.Time
 	if input.ReleaseDate != "" {
 		parsed, err := time.Parse("2006-01-02", input.ReleaseDate)
@@ -57,38 +58,43 @@ func (h *MovieHandler) AddMovie(c *gin.Context) {
 		input.Status = "coming-soon"
 	}
 
-	// Create movie struct matching your model
+	// Create movie
 	movie := models.Movie{
 		Title:           input.Title,
 		Description:     input.Description,
-		PosterURL:       input.PosterURL, // ← Added
+		PosterURL:       input.PosterURL,
+		DurationMinutes: input.DurationMinutes,
 		ReleaseDate:     releaseDate,
 		Status:          input.Status,
 	}
 
-	// Handle genres if provided
-	if len(input.GenreIDs) > 0 {
+	// ==================== Handle Genre Names ====================
+	if len(input.GenreNames) > 0 {
 		var genres []models.Genre
-		if err := h.db.DB.Where("id IN ?", input.GenreIDs).Find(&genres).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "database error while fetching genres"})
-			return
-		}
 
-		if len(genres) != len(input.GenreIDs) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "one or more genre IDs are invalid"})
-			return
+		for _, name := range input.GenreNames {
+			var genre models.Genre
+
+			// FirstOrCreate: Create genre if it doesn't exist
+			err := h.db.DB.Where("name = ?", name).FirstOrCreate(&genre, models.Genre{Name: name}).Error
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process genre: " + name})
+				return
+			}
+
+			genres = append(genres, genre)
 		}
 
 		movie.Genres = genres
 	}
 
-	// Save to database
+	// Save movie to database
 	if err := h.db.DB.Create(&movie).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create movie"})
 		return
 	}
 
-	// Reload movie with Genres preloaded
+	// Reload with genres preloaded for response
 	h.db.DB.Preload("Genres").First(&movie, movie.ID)
 
 	c.JSON(http.StatusCreated, gin.H{

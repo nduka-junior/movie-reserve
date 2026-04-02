@@ -1,6 +1,7 @@
 package handlers
 
 import (
+
 	"net/http"
 	"strconv"
 	"time"
@@ -53,9 +54,23 @@ func (h *ReservationHandler) GetMyReservations(c *gin.Context) {
 // 2. Create Reservation (Reserve Seats) - Main Feature
 // =============================================
 func (h *ReservationHandler) CreateReservation(c *gin.Context) {
-	userID, exists := c.Get("user_id")
+userIDInterface, exists := c.Get("user_id")
+	
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	// Safe conversion from float64 (from JWT) to uint
+	var userID uint
+	switch v := userIDInterface.(type) {
+	case float64:
+		userID = uint(v)
+	case uint:
+		userID = v
+	case int:
+		userID = uint(v)
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID type"})
 		return
 	}
 
@@ -120,7 +135,7 @@ func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 
 		// 4. Create Reservation
 		reservation := models.Reservation{
-			UserID:     userID.(uint),
+			UserID:     userID,
 			ShowtimeID: input.ShowtimeID,
 			Status:     "confirmed",
 			TotalPrice: 0,
@@ -183,12 +198,25 @@ case gorm.ErrRecordNotFound:
 // 3. Cancel Reservation (User - Only Upcoming)
 // =============================================
 func (h *ReservationHandler) CancelReservation(c *gin.Context) {
-	userID, exists := c.Get("user_id")
+userIDInterface, exists := c.Get("user_id")
+	
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-
+	// Safe conversion from float64 (from JWT) to uint
+	var userID uint
+	switch v := userIDInterface.(type) {
+	case float64:
+		userID = uint(v)
+	case uint:
+		userID = v
+	case int:
+		userID = uint(v)
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID type"})
+		return
+	}
 	reservationIDStr := c.Param("id")
 	reservationID, err := strconv.ParseUint(reservationIDStr, 10, 32)
 	if err != nil {
@@ -202,7 +230,7 @@ func (h *ReservationHandler) CancelReservation(c *gin.Context) {
 			return err
 		}
 
-		if reservation.UserID != userID.(uint) {
+		if reservation.UserID != userID{
 			return gorm.ErrRecordNotFound
 		}
 
